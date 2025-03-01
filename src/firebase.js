@@ -1,16 +1,24 @@
 // Import the functions you need from the SDKs you need
+import os from "os";
 import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Destructure environment variables
+const {
+  VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_APP_ID,
+  VITE_MESSAGINGSENDER_ID
+} = import.meta.env;
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDE3xtaXO-lGwp9wThbvBYg2WS1tAxWtNw",
+
+  apiKey: VITE_FIREBASE_API_KEY,
   authDomain: "vealth-project.firebaseapp.com",
-  projectId: "vealth-project",
+  projectId: VITE_FIREBASE_PROJECT_ID,
   storageBucket: "vealth-project.firebasestorage.app",
-  messagingSenderId: "317589262001",
-  appId: "1:317589262001:web:430a40fc0d6a6c7c4cdc90"
+  messagingSenderId: VITE_MESSAGINGSENDER_ID,
+  appId: VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
