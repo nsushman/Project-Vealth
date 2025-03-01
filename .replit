@@ -19,5 +19,29 @@ localPort = 5173
 externalPort = 80
 
 [[ports]]
+localPort = 5174
+externalPort = 3001
+
+[[ports]]
 localPort = 9005
 externalPort = 3000
+
+[workflows]
+runButton = "Deploy to firebase"
+
+[[workflows.workflow]]
+name = "Deploy to firebase"
+mode = "sequential"
+author = 35064144
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run build"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "firebase deploy"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"Complete\""

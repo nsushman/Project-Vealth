@@ -1,9 +1,15 @@
-import './App.css';
+// App.jsx (simplified)
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Login from "./pages/Login";
+import Home from "./pages/Home";
 
 export default function App() {
   return (
-    <main className="container mt-5">
-      <h1 className="text-center text-primary">Hello, World!</h1>
-    </main>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/home" element={<Home />} />
+      </Routes>
+    </Router>
   );
 }
