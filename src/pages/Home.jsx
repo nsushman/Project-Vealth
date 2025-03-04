@@ -1,96 +1,129 @@
 import React, { useEffect, useState, useRef } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import "bootstrap/dist/css/bootstrap.min.css";
-import "bootstrap/dist/js/bootstrap.bundle.min.js"; // Ensure Bootstrap JS is loaded
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 export default function Home() {
+  const [accounts, setAccounts] = useState([]); // Store user accounts
   const [cards, setCards] = useState([]);
-  const [youtubeLink, setYoutubeLink] = useState(""); // New state for YouTube link
+  const [youtubeLink, setYoutubeLink] = useState(""); // YouTube lesson link
   const carouselRef = useRef(null);
 
   useEffect(() => {
-    const fetchRandomLessonCards = async () => {
-      try {
-        // Fetch lessons
+    const auth = getAuth();
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        console.log("User logged in:", user.uid);
+
+        // ✅ Fetch user accounts
+        const accountsRef = collection(db, "accounts");
+        const accountsQuery = query(accountsRef, where("child_id", "==", user.uid));
+        const accountsSnapshot = await getDocs(accountsQuery);
+
+        if (!accountsSnapshot.empty) {
+          let userAccounts = accountsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+
+          // ✅ Sort accounts:
+          // - Accounts with goals come first
+          // - Accounts with goals are sorted by the nearest goal_end_date
+          userAccounts.sort((a, b) => {
+            if (a.goal_end_date && !b.goal_end_date) return -1;
+            if (!a.goal_end_date && b.goal_end_date) return 1;
+            if (a.goal_end_date && b.goal_end_date) {
+              return new Date(a.goal_end_date) - new Date(b.goal_end_date);
+            }
+            return 0;
+          });
+
+          setAccounts(userAccounts);
+        }
+
+        // ✅ Fetch a random lesson
         const lessonsRef = collection(db, "lessons");
         const lessonsSnapshot = await getDocs(lessonsRef);
 
-        if (lessonsSnapshot.empty) {
-          console.log("No lessons found in Firestore.");
-          return;
+        if (!lessonsSnapshot.empty) {
+          const lessons = lessonsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          const randomLesson = lessons[Math.floor(Math.random() * lessons.length)];
+
+          setYoutubeLink(randomLesson.youtube_link || "");
+
+          // ✅ Fetch lesson cards
+          const cardsRef = collection(db, `lessons/${randomLesson.id}/cards`);
+          const cardsSnapshot = await getDocs(cardsRef);
+
+          if (!cardsSnapshot.empty) {
+            setCards(cardsSnapshot.docs.map(doc => doc.data().content));
+          }
         }
-
-        // Pick a random lesson
-        const lessons = lessonsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        const randomLesson = lessons[Math.floor(Math.random() * lessons.length)];
-
-        // Store YouTube link
-        setYoutubeLink(randomLesson.youtube_link || ""); // Store the YouTube link
-
-        // Fetch cards for the selected lesson
-        const cardsRef = collection(db, `lessons/${randomLesson.id}/cards`);
-        const cardsSnapshot = await getDocs(cardsRef);
-
-        if (cardsSnapshot.empty) {
-          console.log("No cards found for this lesson.");
-          return;
-        }
-
-        // Store lesson card contents
-        const cardContents = cardsSnapshot.docs.map(doc => doc.data().content);
-        setCards(cardContents);
-
-      } catch (error) {
-        console.error("Error fetching lesson cards:", error);
       }
-    };
-
-    fetchRandomLessonCards();
+    });
   }, []);
 
-  // ✅ Enable Swipe Gestures for Mobile Users
-  useEffect(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-
-    let startX = 0;
-    let endX = 0;
-
-    const handleTouchStart = (event) => {
-      startX = event.touches[0].clientX;
-    };
-
-    const handleTouchMove = (event) => {
-      endX = event.touches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      if (startX - endX > 50) {
-        carousel.querySelector(".carousel-control-next").click();
-      } else if (startX - endX < -50) {
-        carousel.querySelector(".carousel-control-prev").click();
-      }
-    };
-
-    carousel.addEventListener("touchstart", handleTouchStart);
-    carousel.addEventListener("touchmove", handleTouchMove);
-    carousel.addEventListener("touchend", handleTouchEnd);
-
-    return () => {
-      carousel.removeEventListener("touchstart", handleTouchStart);
-      carousel.removeEventListener("touchmove", handleTouchMove);
-      carousel.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [cards]);
+  // ✅ Function to calculate goal progress percentage
+  const calculateProgress = (account) => {
+    if (account.goal_amount) {
+      // ✅ Money-based goal progress
+      return Math.min((account.balance / account.goal_amount) * 100, 100);
+    } else if (account.goal_end_date) {
+      // ✅ Time-based goal progress
+      const today = new Date();
+      const goalDate = new Date(account.goal_end_date);
+      const totalDays = Math.max(1, (goalDate - today) / (1000 * 60 * 60 * 24)); // Prevent division by zero
+      const daysPassed = Math.max(0, (new Date() - today) / (1000 * 60 * 60 * 24));
+      return Math.min((daysPassed / totalDays) * 100, 100);
+    }
+    return 0;
+  };
 
   return (
     <div className="container mt-4">
       <h1 className="text-center mb-4">You are in</h1>
 
+      {/* ✅ Account Cards Section (Sorted) */}
+      <div className="mb-4">
+        {accounts.map(account => (
+          <div key={account.id} className="mb-3">
+            <div className="card shadow-lg">
+              <div className="card-body text-center">
+                <h5 className="card-title">{account.account_name}</h5>
+                <p className="card-text">💰 Balance: ${account.balance.toFixed(2)}</p>
+
+                {/* ✅ Display goal progress bar if applicable */}
+                {account.goal_amount || account.goal_end_date ? (
+                  <>
+                    {account.goal_amount && <p className="card-text">🎯 Goal: ${account.goal_amount.toFixed(2)}</p>}
+                    {account.goal_end_date && <p className="card-text">📅 Goal Date: {new Date(account.goal_end_date).toLocaleDateString()}</p>}
+
+                    <div className="progress mt-2">
+                      <div
+                        className="progress-bar bg-success"
+                        role="progressbar"
+                        style={{ width: `${calculateProgress(account)}%` }}
+                        aria-valuenow={calculateProgress(account)}
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                      >
+                        {`${Math.round(calculateProgress(account))}%`}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ✅ Lesson Carousel */}
       {cards.length > 0 ? (
         <div id="lessonCarousel" className="carousel slide" ref={carouselRef} data-bs-interval="false">
           {/* Carousel Indicators */}
@@ -121,42 +154,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-
-          {/* Navigation Arrows */}
-          <button
-            className="carousel-control-prev"
-            type="button"
-            data-bs-target="#lessonCarousel"
-            data-bs-slide="prev"
-            style={{
-              opacity: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 10,
-              width: "10%",
-            }}
-          >
-            <span className="carousel-control-prev-icon" aria-hidden="true" style={{ backgroundColor: "black" }}></span>
-            <span className="visually-hidden">Previous</span>
-          </button>
-          <button
-            className="carousel-control-next"
-            type="button"
-            data-bs-target="#lessonCarousel"
-            data-bs-slide="next"
-            style={{
-              opacity: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 10,
-              width: "10%",
-            }}
-          >
-            <span className="carousel-control-next-icon" aria-hidden="true" style={{ backgroundColor: "black" }}></span>
-            <span className="visually-hidden">Next</span>
-          </button>
         </div>
       ) : (
         <p className="text-center">Loading lesson cards...</p>
